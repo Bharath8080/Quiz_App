@@ -1,0 +1,5 @@
+streamlit
+educhain
+langchain 
+langchain-openai 
+langchain-community
