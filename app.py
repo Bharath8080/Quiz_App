@@ -3,14 +3,11 @@ from educhain import Educhain, LLMConfig
 from educhain.engines import qna_engine
 from langchain_openai import ChatOpenAI
 import os
-from dotenv import load_dotenv
 import json
 from datetime import datetime
 import pandas as pd
 import random
 
-# Load environment variables if available
-load_dotenv()
 
 # Set page configuration at the very top of the script
 st.set_page_config(page_title="Multilingual Quiz App", page_icon="🧠", layout="wide")
@@ -56,8 +53,7 @@ if 'page' not in st.session_state:
 
 # --- Sidebar Navigation ---
 with st.sidebar:
-    st.sidebar.image("https://framerusercontent.com/images/T5kFJeyNUyAYJBz4PaWuP7Bfr0.png", use_container_width=True)
-    st.title("Multilingual Quiz App")
+    st.title("Create Multilingual Quiz")
     
     # Navigation
     st.subheader("📚 Navigation")
@@ -70,12 +66,10 @@ with st.sidebar:
     
     st.header("⚙️ Configuration")
     
-    # Use environment variable if available, otherwise hide API key input
-    api_key = os.getenv("SUTRA_API_KEY", "")
-    if not api_key:
-        api_key = st.text_input("Sutra API Key", value="", type="password")
-        if not api_key:
-            st.warning("Please set your Sutra API Key as an environment variable or enter it above")
+    # API Key section
+    st.markdown("### API Key")
+    st.markdown("Get your free API key from [Sutra API](https://www.two.ai/sutra/api)")
+    api_key = st.text_input("Enter your Sutra API Key:", type="password")
     
     st.markdown("---")
     st.markdown("**Powered by** [Educhain](https://github.com/satvik314/educhain)")
@@ -243,25 +237,21 @@ def save_quiz_result():
 # --- Create Quiz Page ---
 def show_create_quiz_page():
     st.markdown(
-        f'<h1><img src="https://framerusercontent.com/images/9vH8BcjXKRcC5OrSfkohhSyDgX0.png" width="60"/> Create Multilingual Quiz</h1>',
+        f'<h1><img src="https://framerusercontent.com/images/9vH8BcjXKRcC5OrSfkohhSyDgX0.png" width="60"/> Multilingual Quiz App</h1>',
         unsafe_allow_html=True
     )
     
     # --- Initialize Educhain client if API key is provided ---
-    api_key = os.getenv("SUTRA_API_KEY", "")
     if not api_key:
-        api_key = st.sidebar.text_input("Sutra API Key", value="", type="password")
-        
-    if api_key:
-        educhain_client = initialize_educhain(api_key)
-        if educhain_client:
-            qna_engine = educhain_client.qna_engine
-        else:
-            st.error("Failed to initialize Educhain. Please check your Sutra API key.")
-            return
-    else:
-        st.warning("Please enter your Sutra API Key in the sidebar or set it as an environment variable to continue.")
+        st.warning("Please enter your Sutra API Key in the sidebar to continue.")
         return
+
+    educhain_client = initialize_educhain(api_key)
+    if not educhain_client:
+        st.error("Failed to initialize Educhain. Please check your Sutra API key.")
+        return
+
+    qna_engine = educhain_client.qna_engine
     
     # Quiz configuration
     col1, col2, col3 = st.columns(3)
@@ -287,45 +277,58 @@ def show_create_quiz_page():
     # Generate quiz button
     if st.button("Generate Quiz"):
         with st.spinner(f"Generating {num_questions} {selected_question_type.lower()} questions in {selected_language}..."):
-            # Use the appropriate method based on question type
-            if selected_question_type == "Multiple Choice":
-                questions = qna_engine.generate_questions(
-                    topic=topic,
-                    num=num_questions,
-                    question_type="Multiple Choice",
-                    custom_instructions=language_custom_instructions
-                )
-            else:  # True/False
-                questions = qna_engine.generate_questions(
-                    topic=topic,
-                    num=num_questions,
-                    question_type="True/False",
-                    custom_instructions=language_custom_instructions
-                )
-            
-            # Convert to quiz format and save
-            quiz = convert_to_quiz_format(questions, topic, selected_language, selected_difficulty)
-            quiz_id = save_quiz(quiz)
-            
-            st.success(f"Quiz generated successfully! Quiz ID: {quiz_id}")
-            
-            # Preview quiz
-            with st.expander("Preview Quiz"):
-                for i, q in enumerate(quiz["questions"]):
-                    st.subheader(f"Question {i+1}: {q['question']}")
-                    st.write("Options:")
-                    for j, opt in enumerate(q["options"]):
-                        st.write(f"   {chr(65 + j)}. {opt}")
-                    st.write(f"**Correct Answer:** {q['answer']}")
-                    if "explanation" in q and q["explanation"]:
-                        st.write(f"**Explanation:** {q['explanation']}")
-                    st.markdown("---")
-            
-            # Button to start quiz
-            if st.button("Start This Quiz"):
-                start_quiz(quiz)
-                st.session_state.page = "take"
-                st.rerun()
+            try:
+                # Use the appropriate method based on question type
+                if selected_question_type == "Multiple Choice":
+                    questions = qna_engine.generate_questions(
+                        topic=topic,
+                        num=num_questions,
+                        question_type="Multiple Choice",
+                        custom_instructions=language_custom_instructions,
+                        difficulty=selected_difficulty.lower(),
+                        language=selected_language
+                    )
+                else:  # True/False
+                    questions = qna_engine.generate_questions(
+                        topic=topic,
+                        num=num_questions,
+                        question_type="True/False",
+                        custom_instructions=language_custom_instructions,
+                        difficulty=selected_difficulty.lower(),
+                        language=selected_language
+                    )
+                
+                if not questions or not hasattr(questions, "questions"):
+                    st.error("Failed to generate questions. Please try again with different parameters.")
+                    return
+                
+                # Convert to quiz format and save
+                quiz = convert_to_quiz_format(questions, topic, selected_language, selected_difficulty)
+                quiz_id = save_quiz(quiz)
+                
+                st.success(f"Quiz generated successfully! Quiz ID: {quiz_id}")
+                
+                # Preview quiz
+                with st.expander("Preview Quiz"):
+                    for i, q in enumerate(quiz["questions"]):
+                        st.subheader(f"Question {i+1}: {q['question']}")
+                        st.write("Options:")
+                        for j, opt in enumerate(q["options"]):
+                            st.write(f"   {chr(65 + j)}. {opt}")
+                        st.write(f"**Correct Answer:** {q['answer']}")
+                        if "explanation" in q and q["explanation"]:
+                            st.write(f"**Explanation:** {q['explanation']}")
+                        st.markdown("---")
+                
+                # Button to start quiz
+                if st.button("Start This Quiz"):
+                    start_quiz(quiz)
+                    st.session_state.page = "take"
+                    st.rerun()
+                    
+            except Exception as e:
+                st.error(f"Error generating questions: {str(e)}")
+                st.error("Please try again with different parameters or check your API key.")
 
 # --- Saved Quizzes Page ---
 def show_saved_quizzes_page():
